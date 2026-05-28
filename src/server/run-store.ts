@@ -35,7 +35,29 @@ export type PersistedRunState = {
 }
 
 const RUNS_ROOT = path.join(getHermesRoot(), 'webui-mvp', 'runs')
+const ACTIVE_RUN_STALE_MS = 5 * 60_000
 const runUpdateQueues = new Map<string, Promise<void>>()
+
+function isTerminalRunStatus(status: PersistedRunState['status']): boolean {
+  return status === 'complete' || status === 'error' || status === 'stalled'
+}
+
+function normalizePossiblyStaleRun(run: PersistedRunState): PersistedRunState {
+  if (isTerminalRunStatus(run.status)) return run
+
+  const lastEventAt = Number.isFinite(run.lastEventAt)
+    ? run.lastEventAt
+    : run.updatedAt
+  if (Date.now() - lastEventAt < ACTIVE_RUN_STALE_MS) return run
+
+  return {
+    ...run,
+    status: 'stalled',
+    errorMessage:
+      run.errorMessage ??
+      'Run stalled after the workspace process stopped receiving events.',
+  }
+}
 
 function encodeSessionKey(sessionKey: string): string {
   return encodeURIComponent(sessionKey || 'main')
@@ -230,6 +252,7 @@ export async function getActiveRunForSession(
     )
     const candidates = runs
       .filter((run): run is PersistedRunState => Boolean(run))
+      .map(normalizePossiblyStaleRun)
       .filter((run) => !['complete', 'error'].includes(run.status))
       .sort((a, b) => b.updatedAt - a.updatedAt)
     return candidates[0] ?? null

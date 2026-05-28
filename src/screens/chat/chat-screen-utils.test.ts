@@ -57,9 +57,11 @@ describe('advanceStickyStreamingText', () => {
 })
 
 describe('response wait detection', () => {
-  it('treats persisted complete runs as terminal', () => {
+  it('treats persisted terminal runs as terminal', () => {
     expect(isTerminalActiveRunStatus('complete')).toBe(true)
     expect(isTerminalActiveRunStatus('completed')).toBe(true)
+    expect(isTerminalActiveRunStatus('error')).toBe(true)
+    expect(isTerminalActiveRunStatus('stalled')).toBe(true)
     expect(isTerminalActiveRunStatus('active')).toBe(false)
   })
 

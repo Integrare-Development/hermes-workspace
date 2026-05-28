@@ -19,10 +19,45 @@ afterEach(() => {
   tempHome = null
   if (originalHermesHome === undefined) delete process.env.HERMES_HOME
   else process.env.HERMES_HOME = originalHermesHome
+  vi.useRealTimers()
   vi.resetModules()
 })
 
 describe('run-store persistence', () => {
+  it('reports old non-terminal runs as stalled so reload polling can clear waiting UI', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-05-20T21:00:00.000Z'))
+
+    const { createPersistedRun, getActiveRunForSession } =
+      await import('./run-store')
+
+    await createPersistedRun({ runId: 'run-stale', sessionKey: 'session-1' })
+
+    vi.setSystemTime(new Date('2026-05-20T21:06:00.000Z'))
+
+    const activeRun = await getActiveRunForSession('session-1')
+    expect(activeRun?.runId).toBe('run-stale')
+    expect(activeRun?.status).toBe('stalled')
+    vi.useRealTimers()
+  })
+
+  it('keeps recent non-terminal runs active', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-05-20T21:00:00.000Z'))
+
+    const { createPersistedRun, getActiveRunForSession } =
+      await import('./run-store')
+
+    await createPersistedRun({ runId: 'run-fresh', sessionKey: 'session-1' })
+
+    vi.setSystemTime(new Date('2026-05-20T21:04:59.000Z'))
+
+    const activeRun = await getActiveRunForSession('session-1')
+    expect(activeRun?.runId).toBe('run-fresh')
+    expect(activeRun?.status).toBe('accepted')
+    vi.useRealTimers()
+  })
+
   it('preserves concurrent updates to the same run', async () => {
     const { addRunLifecycleEvent, createPersistedRun, getPersistedRun } =
       await import('./run-store')

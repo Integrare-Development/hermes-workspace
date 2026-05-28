@@ -13,7 +13,14 @@ export type ResponseWaitSnapshot = {
 export function isTerminalActiveRunStatus(status: unknown): boolean {
   return (
     typeof status === 'string' &&
-    ['complete', 'completed', 'failed', 'cancelled', 'error'].includes(status)
+    [
+      'complete',
+      'completed',
+      'failed',
+      'cancelled',
+      'error',
+      'stalled',
+    ].includes(status)
   )
 }
 
@@ -30,7 +37,7 @@ function assistantMessageIdentity(message: ChatMessage): string {
 export function createResponseWaitSnapshot(
   messages: Array<ChatMessage>,
 ): ResponseWaitSnapshot {
-  const last = messages[messages.length - 1]
+  const last = messages.at(-1)
   return {
     messageCount: messages.length,
     lastAssistantId:
@@ -42,7 +49,7 @@ export function shouldClearWaitingForAssistantMessage(
   messages: Array<ChatMessage>,
   snapshot: ResponseWaitSnapshot,
 ): boolean {
-  const last = messages[messages.length - 1]
+  const last = messages.at(-1)
   if (!last || last.role !== 'assistant') return false
   if (last.__streamingStatus === 'streaming') return false
 
