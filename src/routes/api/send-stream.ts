@@ -28,6 +28,10 @@ import { openaiChat } from '../../server/openai-compat-api'
 import { streamResponses } from '../../server/responses-api'
 import { selectPortableConversationHistory } from '../../server/portable-history'
 import {
+  combineSystemMessages,
+  loadCoordinatorPrompt,
+} from '../../server/coordinator-prompt-loader'
+import {
   SESSIONS_API_UNAVAILABLE_MESSAGE,
   createSession,
   ensureGatewayProbed,
@@ -520,6 +524,16 @@ export const Route = createFileRoute('/api/send-stream')({
                     scopedMessage,
                     attachments,
                   )
+                  // Camada 1 do redesign gate-return v2: coordinator-prompt como
+                  // system message obrigatorio em toda sessao de chat dashboard,
+                  // tambem no path portable (Ollama/OpenAI compat). Coordinator
+                  // vai na frente para ser o frame primario; locale entra apos
+                  // como contexto suplementar.
+                  const coordinatorPromptContent = loadCoordinatorPrompt()
+                  const coordinatorSystemMsg: Array<OpenAICompatMessage> =
+                    coordinatorPromptContent
+                      ? [{ role: 'system', content: coordinatorPromptContent }]
+                      : []
                   // Inject locale preference so the agent responds in the user's language
                   const locale = typeof body.locale === 'string' ? body.locale.trim() : ''
                   const localeSystemMsg: Array<OpenAICompatMessage> = locale && locale !== 'en'
@@ -548,6 +562,7 @@ export const Route = createFileRoute('/api/send-stream')({
                     { localBaseUrl },
                   )
                   const portableMessages: Array<OpenAICompatMessage> = [
+                    ...coordinatorSystemMsg,
                     ...localeSystemMsg,
                     ...effectiveHistory,
                     {
@@ -967,13 +982,22 @@ export const Route = createFileRoute('/api/send-stream')({
               })()
 
               try {
+                // Camada 1 do redesign gate-return v2: coordinator-prompt como
+                // system message obrigatorio em toda sessao de chat dashboard.
+                // Combina com o `thinking` hint do dashboard quando presente;
+                // coordinator vence prioridade (frame primario), thinking entra
+                // como contexto suplementar. Empty -> undefined (preserva
+                // comportamento pre-patch quando coordinator-prompt ausente).
+                const combinedSystemMessage =
+                  combineSystemMessages(loadCoordinatorPrompt(), thinking) ||
+                  undefined
                 await streamChat(
                 sessionKey,
                 {
                   message: scopedMessage,
                   model:
                     typeof body.model === 'string' ? body.model : undefined,
-                  system_message: thinking,
+                  system_message: combinedSystemMessage,
                   attachments: attachments || undefined,
                 },
                 {
