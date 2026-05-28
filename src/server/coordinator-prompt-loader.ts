@@ -37,6 +37,14 @@ type CachedPrompt = {
 
 let cached: CachedPrompt | null = null
 
+function debugEnabled(): boolean {
+  return process.env.HERMES_COORDINATOR_DEBUG === '1'
+}
+
+function debugLog(msg: string): void {
+  if (debugEnabled()) console.log(`[coordinator-prompt-loader] ${msg}`)
+}
+
 function resolveCoordinatorPromptPath(): string {
   const override = process.env.HERMES_COORDINATOR_PROMPT_PATH
   if (override && override.trim().length > 0) return override.trim()
@@ -56,11 +64,18 @@ function resolveCoordinatorPromptPath(): string {
  */
 export function loadCoordinatorPrompt(): string {
   const now = Date.now()
+  debugLog(`invoked ts=${now} cwd=${process.cwd()}`)
+
   if (cached && now - cached.loadedAt < CACHE_TTL_MS) {
+    debugLog(
+      `cache hit length=${cached.content.length} ageMs=${now - cached.loadedAt}`,
+    )
     return cached.content
   }
 
   const filePath = resolveCoordinatorPromptPath()
+  debugLog(`cache miss; resolving path=${filePath}`)
+
   if (!existsSync(filePath)) {
     console.warn(
       `[coordinator-prompt-loader] file missing at ${filePath}; sessions will run without coordinator policy injected`,
@@ -71,6 +86,7 @@ export function loadCoordinatorPrompt(): string {
 
   try {
     const content = readFileSync(filePath, 'utf-8').trim()
+    debugLog(`fs read OK length=${content.length} path=${filePath}`)
     cached = { content, loadedAt: now }
     return content
   } catch (err) {
